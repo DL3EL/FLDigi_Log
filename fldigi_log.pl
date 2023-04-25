@@ -60,8 +60,10 @@ my $fldigi_check ="";
 
 	# get script name
 	my $scriptname = $0;
-	my $path = ($scriptname =~ /(.*)fldigi_log.pl/s)? $1 : "undef";
-	$logfile = $path . "fldigi_log.log";
+	my $path = ($scriptname =~ /(.*)\/([\w]+).pl/s)? $1 : "undef";
+	$path = $path . "/";
+	$scriptname = $2;
+	$logfile = $path . $scriptname . ".log";
 	$checkdatei = $path ."log_detail.txt";
 	my $tm = localtime(time);
 	
@@ -83,7 +85,7 @@ my $fldigi_check ="";
 	}
 
 ## Bei Änderungen des Pfades bitte auch /etc/logrotate.d/rsyslog anpassen
-	my $confdatei = $path . "fldigi_log.conf";
+	my $confdatei = $path . $scriptname . ".conf";
 	open(INPUT, $confdatei) or die "Fehler bei Eingabedatei: $confdatei\n";
 		undef $/;#	
 		$data = <INPUT>;
@@ -107,10 +109,10 @@ my $fldigi_check ="";
 	}
 	$check_minutes = $check_minutes_par if ($check_minutes_par);
 	$verbose = $debug if (!$verbose);
-	printf "Parameter: Key: %s ID: %s URL: %s LB: %s CheckM: %s Debug: %s\n",$cloudlogApiKey,$station_profile_id,$cloudlogApiUrl,$fldigi_logbook,$check_minutes,$verbose if $verbose;	
+	printf "Parameter: Key: %s ID: %s URL: %s LB: %s CheckMin: %s Debug: %s\n",$cloudlogApiKey,$station_profile_id,$cloudlogApiUrl,$fldigi_logbook,$check_minutes,$verbose if $verbose;	
 	write_log(sprintf("Main Start: %02d:%02d:%02d am %02d.%02d.%04d\n",$tm->hour, $tm->min, $tm->sec, $tm->mday, $tm->mon,$tm->year)) if $verbose;
 	write_log(sprintf("CLI Parameter: Verbose=%s check_Minutes=%s\n",$verbose, $check_minutes_par)) if $verbose;
-	write_log(sprintf("Run-Parameter: Key: %s ID: %s URL: %s LB: %s CheckM: %s FLR_Check %s Debug: %s\n",$cloudlogApiKey,$station_profile_id,$cloudlogApiUrl,$fldigi_logbook,$check_minutes,$fldigi_check,$verbose)) if $verbose;
+	write_log(sprintf("Run-Parameter: Key: %s ID: %s URL: %s LB: %s CheckMin: %s FLR_Check %s Debug: %s\n",$cloudlogApiKey,$station_profile_id,$cloudlogApiUrl,$fldigi_logbook,$check_minutes,$fldigi_check,$verbose)) if $verbose;
 
 	if ($fldigi_check ne "") {
 		if (!check_fldigi()) {
@@ -176,9 +178,6 @@ my $fldigi_check ="";
 			foreach $item (@qso_array) {
 				$tag = ($item =~ /([\w]+):(\d+)>(.*)/s)? $1 : "undef";
 				if (($tag ne "undef") && ($tag ne "")) {
-					if ((substr($tag,0,3) eq "MY_")) {
-						$tag = "z" . $tag;
-					}	
 					push @{$QSOtab{$tag}}, length($3);
 					push @{$QSOtab{$tag}}, $3;
 					push @{$QSOtab{$tag}}, 1;
@@ -203,11 +202,11 @@ my $fldigi_check ="";
 				$mode = $QSOtab{'MODE'}[1];
 				$call = $QSOtab{'CALL'}[1];
 				$date = $QSOtab{'QSO_DATE'}[1];
-				$time = substr($QSOtab{'TIME_ON'}[1],0,4);
+				$time = substr($QSOtab{'TIME_OFF'}[1],0,4);
 
 				$datelong = $date;
 				$datelong =~ s/(\d\d\d\d)(\d\d)(\d\d)/$1-$2-$3/;
-				$timelong = $QSOtab{'TIME_ON'}[1];
+				$timelong = $QSOtab{'TIME_OFF'}[1];
 				$timelong =~ s/(\d\d)(\d\d)(\d\d)/$1:$2:$3/;
 				$timel = $datelong . "T" . $timelong;
 				$timeqso_epoc = str2time($timel);
@@ -236,12 +235,8 @@ my $fldigi_check ="";
 						$notes =~ tr/\r/ /s;
 						$notes =~ tr/\n/ /s;
 						$notes =~ tr/[ ]./ /s;
-						if ($QSOtab{'NOTES'}[0] > length($notes)+1) {
-							printf("%s-%s-%s-%s-%s, Notes: %s [%d, was %d]\n",$call,$date,$time,$mode,$band,$notes,length($notes),$QSOtab{'NOTES'}[0]) if $verbose;
-							write_log(sprintf("%s-%s-%s-%s-%s, Notes: %s [%d, was %d]\n",$call,$date,$time,$mode,$band,$notes,length($notes),$QSOtab{'NOTES'}[0])) if $verbose;
-							$QSOtab{'NOTES'}[1] = $notes;
-							$QSOtab{'NOTES'}[0] = length($notes);
-						}	
+						$QSOtab{'NOTES'}[1] = $notes;
+						$QSOtab{'NOTES'}[0] = length($notes);
 					}
 				}
 
@@ -285,14 +280,8 @@ my $apicall = "";
 				$nn=0;
 				for my $tag (sort keys %QSOtab) {
 					if ($QSOtab{$tag}[2]) {
-						if ((substr($tag,0,4) eq "zMY_")) {
-							$tags = substr($tag,1,length($tag)-1);
-						}
-						else {
-							$tags = $tag;
-						}		
 						++$nn;
-						$apistring_var = $apistring_var . sprintf("<$tags:$QSOtab{$tag}[0]>$QSOtab{$tag}[1]");
+						$apistring_var = $apistring_var . sprintf("<$tag:$QSOtab{$tag}[0]>$QSOtab{$tag}[1]");
 					}	
 				}
 				if ($ii != $nn) {
